@@ -1,7 +1,7 @@
 
 [comment]: # (SPDX-License-Identifier:  Apache-2.0)
 
-# Implementing a Control Plane using P4Runtime
+# WORK IN PROGRESS
 
 ## Introduction
 
@@ -100,6 +100,31 @@ refer to specific tables, keys, and actions by name, and we use a P4Info helper
 to convert the names into the IDs that are required for P4Runtime. Any changes
 in the P4 program that add or rename tables, keys, or actions will need to be
 reflected in your table entries.
+
+### Notes on the CPU port, PacketIn and PacketOut messages, and controller metadata
+
+You _MUST NOT_ associate the CPU port number with an interface,
+i.e. it would cause problems if you added a command line option
+`-i 510@veth16` to the example command line above.  The CPU port is
+special in that effectively one end is connected to the BMv2 switch
+on the CPU port, and the other end is always connected to the
+P4Runtime API server code that runs within the `simple_switch_grpc`
+process.
+
+All packets sent by your P4 code to the CPU port go to this P4Runtime
+API server, are sent via a `PacketIn` message from the server to your
+controller (which is a P4Runtime API client) over the P4Runtime API
+gRPC connection, and become `PacketIn` messages to your controller
+program.  The controller metadata header, if you have one, must be the
+_first_ header when the packet is sent to the CPU port by your P4
+program.
+
+All `PacketOut` messages from your controller program go over the
+P4Runtime API grPC connection to the P4Runtime API server code running
+inside of the `simple_switch_grpc` process, and are then sent into the
+CPU port for your P4 program to process.  The controller metadata
+header, if any, will always be the _first_ header of the packet as
+seen by your P4 parser.
 
 ## Step 2: Implement Tunnel Forwarding
 
