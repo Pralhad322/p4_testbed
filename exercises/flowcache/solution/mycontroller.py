@@ -181,6 +181,15 @@ def addFlowRule( ingress_sw, src_ip_addr, dst_ip_addr, protocol, port, new_dscp,
     ingress_sw.WriteTableEntry(table_entry)
     print("Installed ingress rule on %s" % ingress_sw.name)
 
+def PacketOutMetadataList(opcode, reserved1, operand0):
+    # This function does not use the generated contents of the P4Info
+    # file to map PacketOut metadata fields to indices.  If you change
+    # the PacketOut metadata format in the P4 program, this code must
+    # be manually updated to match.
+    return [{"value": opcode, "bitwidth": 8},
+            {"value": reserved1, "bitwidth": 8},
+            {"value": operand0, "bitwidth": 32}]
+
 def sendPacketOut(sw ,payload, metadatas):
     #TODO remove for exercise
     sw.PacketOut(payload, metadatas)
@@ -236,7 +245,8 @@ async def printCounter(p4info_helper, sw, counter_name, index):
 async def processPacket(message):
         payload = message["packet-in"].packet.payload
         packet = message["packet-in"].packet
-        print("Received %d PacketIn messages" % (len(payload)))
+        print("Received PacketIn message of length %d bytes from switch %s"
+              "" % (len(payload), message["sw"].name))
         if len(payload) > 0:
             i = 0
             pkt = Ether(payload)
@@ -269,7 +279,9 @@ async def processPacket(message):
                 new_dscp_int = 5
                 global_data['index'] = int(pkt[IP].dst.split('.')[3])
                 dst_eth_addr = global_data[ip_da_str]
-                metadatas = [{ "value": 0, "bitwidth": 8 }, { "value": 3, "bitwidth": 32}]
+                metadatas = PacketOutMetadataList(
+                    global_data['controller_opcode_name2int']['SEND_TO_PORT_IN_OPERAND0'],
+                    0, dest_port_int)
                 sendPacketOut(message["sw"], payload, metadatas)
                 addFlowRule(message["sw"],
                             src_ip_addr,
@@ -384,6 +396,8 @@ async def main(p4info_file_path, bmv2_file_path):
 
         global_data['punt_reason_name2int'], global_data['punt_reason_int2name'] = \
                 serializableEnumDict(p4info_helper.p4info, 'PuntReason_t')
+        global_data['controller_opcode_name2int'], global_data['controller_opcode_int2name'] = \
+                serializableEnumDict(p4info_helper.p4info, 'ControllerOpcode_t')
 
         try:
             replicas = [{ "egress_port": global_data['CPU_PORT'], "instance": 1 }]

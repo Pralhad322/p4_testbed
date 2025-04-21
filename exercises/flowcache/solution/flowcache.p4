@@ -253,6 +253,7 @@ control MyIngress(inout headers_t hdr,
             // IPv4, nor PacketOut packets from the controller.
             // TODO: Update per-input-port packet count for packets
             // dropped because they are not IPv4.
+            drop_packet();
         }
     }
 }
