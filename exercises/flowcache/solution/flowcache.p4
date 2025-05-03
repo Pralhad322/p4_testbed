@@ -81,7 +81,7 @@ enum bit<8> PuntReason_t {
 
 @controller_header("packet_out")
 header packet_out_header_h {
-    //TODO remove for exercise
+    /* TODO: Add packet-out fields */
     ControllerOpcode_t   opcode;
     bit<8>  reserved1;
     bit<32> operand0;
@@ -89,7 +89,7 @@ header packet_out_header_h {
 
 @controller_header("packet_in")
 header packet_in_header_h {
-    //TODO remove for exercise
+    /* TODO: Add packet-in fields */
     PortIdToController_t input_port;
     PuntReason_t         punt_reason;
     ControllerOpcode_t   opcode;
@@ -225,7 +225,8 @@ control MyIngress(inout headers_t hdr,
             drop_packet;
             flow_unknown;
         }
-        support_timeout = true; //TODO remove for exercise
+        /* TODO: Add support timeout */
+        support_timeout = true;
         default_action = flow_unknown();
         size = 65536;
     }
@@ -251,8 +252,6 @@ control MyIngress(inout headers_t hdr,
         } else {
             // This is a toy demo.  It drops all packets that are not
             // IPv4, nor PacketOut packets from the controller.
-            // TODO: Update per-input-port packet count for packets
-            // dropped because they are not IPv4.
             drop_packet();
         }
     }

@@ -5,8 +5,8 @@ import os
 import sys
 import asyncio
 import traceback
+import time
 
-from collections import deque
 from collections import Counter
 from scapy.all import *
 
@@ -180,10 +180,24 @@ def addFlowRule( ingress_sw, src_ip_addr, dst_ip_addr, protocol, port, new_dscp,
     ingress_sw.WriteTableEntry(table_entry)
     print("Installed ingress rule on %s" % ingress_sw.name)
 
+def deleteFlowRule(notif):
+    notif["sw"].DeleteTableEntry(notif["idle"].table_entry[0])
+    print("Deleted ingress rule on %s" % notif["sw"].name)
+
+def packetOutMetadataList(opcode, reserved1, operand0):
+    # This function does not use the generated contents of the P4Info
+    # file to map PacketOut metadata fields to indices.  If you change
+    # the PacketOut metadata format in the P4 program, this code must
+    # be manually updated to match.
+    return [{"value": opcode, "bitwidth": 8},
+            {"value": reserved1, "bitwidth": 8},
+            {"value": operand0, "bitwidth": 32}]
+
 def sendPacketOut(sw ,payload, metadatas):
     # TODO: Implement the function logic to send a packet-out message
+    sw.PacketOut(payload, metadatas)
 
-async def readTableRules(p4info_helper, sw):
+def readTableRules(p4info_helper, sw):
     """
     Reads the table entries from all tables on the switch.
 
@@ -199,7 +213,7 @@ async def readTableRules(p4info_helper, sw):
             print(entry)
             print('-----')
 
-async def printCounter(p4info_helper, sw, counter_name, index):
+def printCounter(p4info_helper, sw, counter_name, index):
     """
     Reads the specified counter at the given index from the switch. In our
     program, the index is derived from the first 6 bits of the IP destination address.
@@ -224,17 +238,18 @@ async def printCounter(p4info_helper, sw, counter_name, index):
 
            if e.code() == grpc.StatusCode.UNKNOWN:
             print(f"Unknown gRPC error from {sw.name}. Retrying...")
-           await asyncio.sleep(2)
+            time.sleep(2)
 
     except Exception as e:
            print(f"[Unexpected Error in printCounter for {sw.name}]: {e}")
            traceback.print_exc()
-           await asyncio.sleep(2)
+           time.sleep(2)
 
-async def processPacket(message):
-        payload = message["packet-in"].packet.payload
-        packet = message["packet-in"].packet
-        print("Received %d PacketIn messages" % (len(payload)))
+def processPacket(message):
+        payload = message["packet-in"].payload
+        packet = message["packet-in"]
+        print("Received PacketIn message of length %d bytes from switch %s"
+              "" % (len(payload), message["sw"].name))
         if len(payload) > 0:
             i = 0
             pkt = Ether(payload)
@@ -267,7 +282,9 @@ async def processPacket(message):
                 new_dscp_int = 5
                 global_data['index'] = int(pkt[IP].dst.split('.')[3])
                 dst_eth_addr = global_data[ip_da_str]
-                metadatas = [{ "value": 0, "bitwidth": 8 }, { "value": 3, "bitwidth": 32}]
+                metadatas = packetOutMetadataList(
+                    global_data['controller_opcode_name2int']['SEND_TO_PORT_IN_OPERAND0'],
+                    0, dest_port_int)
                 sendPacketOut(message["sw"], payload, metadatas)
                 addFlowRule(message["sw"],
                             src_ip_addr,
@@ -287,21 +304,21 @@ async def processPacket(message):
 async def processNotif(notif_queue):
         while True:
             notif = await notif_queue.get()
-
+            print(notif)
             if notif["type"] == "packet-in":
-                await processPacket(notif)
-                await printCounter(global_data ['p4info_helper'], notif["sw"], 'MyIngress.ingressPktOutCounter', global_data ['index'])
-                await printCounter(global_data ['p4info_helper'], notif["sw"], 'MyEgress.egressPktInCounter', global_data ['index'])
-                await readTableRules(global_data ['p4info_helper'], notif["sw"])
+                processPacket(notif)
+                printCounter(global_data ['p4info_helper'], notif["sw"], 'MyIngress.ingressPktOutCounter', global_data ['index'])
+                printCounter(global_data ['p4info_helper'], notif["sw"], 'MyEgress.egressPktInCounter', global_data ['index'])
+                readTableRules(global_data ['p4info_helper'], notif["sw"])
             elif notif["type"] == "idle-notif":
-                print(notif["idle"])
+                deleteFlowRule(notif)
 
             notif_queue.task_done()
 
 async def packetInHandler(notif_queue,sw):
+    # TODO: Implement the function logic to handle a packet-in message
     while True:
         try:
-           # TODO: Implement the function logic to handle a packet-in message
 
         except grpc.RpcError as e:
             print(f"[gRPC Error in packetInHandler for {sw.name}]")
@@ -318,6 +335,8 @@ async def packetInHandler(notif_queue,sw):
 
 async def idleTimeHandler(notif_queue,sw):
     # TODO: Implement the function logic to handle idle timeout notification
+    while True:
+
 
 def printGrpcError(e):
     print("gRPC Error:", e.details(), end=' ')
@@ -375,6 +394,8 @@ async def main(p4info_file_path, bmv2_file_path):
 
         global_data['punt_reason_name2int'], global_data['punt_reason_int2name'] = \
                 serializableEnumDict(p4info_helper.p4info, 'PuntReason_t')
+        global_data['controller_opcode_name2int'], global_data['controller_opcode_int2name'] = \
+                serializableEnumDict(p4info_helper.p4info, 'ControllerOpcode_t')
 
         try:
             replicas = [{ "egress_port": global_data['CPU_PORT'], "instance": 1 }]

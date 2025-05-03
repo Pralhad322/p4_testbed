@@ -245,7 +245,7 @@ control MyIngress(inout headers_t hdr,
         } else {
             // This is a toy demo.  It drops all packets that are not
             // IPv4, nor PacketOut packets from the controller.
-            // dropped because they are not IPv4.
+            drop_packet();
         }
     }
 }
