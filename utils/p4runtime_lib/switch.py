@@ -19,7 +19,7 @@ from queue import Queue
 import threading
 
 import grpc
-from p4.tmp import p4config_pb2
+from .custom_pb import p4config_pb2
 from p4.v1 import p4runtime_pb2, p4runtime_pb2_grpc
 
 MSG_LOG_MAX_LEN = 1024
@@ -29,7 +29,10 @@ connections = []
 
 def ShutdownAllSwitchConnections():
     for c in connections:
-        c.shutdown()
+        try:
+            c.shutdown()
+        except Exception as e:
+            print(f"Error shutting down connection: {e}")
 
 class StreamDispatcher:
     def __init__(self, stream):
@@ -45,19 +48,27 @@ class StreamDispatcher:
         self.thread.start()
 
     def _dispatch_loop(self):
-        for msg in self.stream:
-            if not self.running:
-                break
-            if msg.HasField("arbitration"):
-                self.arbitration_queue.put(msg.arbitration)
-            elif msg.HasField("packet"):
-                self.packet_in_queue.put(msg.packet)
-            elif msg.HasField("idle_timeout_notification"):
-                self.timeout_queue.put(msg.idle_timeout_notification)
-            elif msg.HasField("error"):
-                self.error_queue.put(msg.error)
+        try:
+            for msg in self.stream:
+                if not self.running:
+                    break
+                if msg.HasField("arbitration"):
+                    self.arbitration_queue.put(msg.arbitration)
+                elif msg.HasField("packet"):
+                    self.packet_in_queue.put(msg.packet)
+                elif msg.HasField("idle_timeout_notification"):
+                    self.timeout_queue.put(msg.idle_timeout_notification)
+                elif msg.HasField("error"):
+                    self.error_queue.put(msg.error)
+                else:
+                    print("Unknown StreamMessageResponse:", msg)
+        except grpc.RpcError as e:
+            if e.code() == grpc.StatusCode.CANCELLED:
+                # This is an expected error when the client shuts down the connection
+                if self.running:
+                    print("gRPC stream cancelled: this may be expected during normal operation")
             else:
-                print("Unknown StreamMessageResponse:", msg)
+                print(f"gRPC error in dispatch loop: {e.code()}: {e.details()}")
 
     def stop(self):
         self.running = False
@@ -85,8 +96,22 @@ class SwitchConnection(object):
         return p4config_pb2.P4DeviceConfig()
 
     def shutdown(self):
-        self.requests_stream.close()
-        self.stream_msg_resp.cancel()
+        # First stop the dispatcher thread to prevent it from processing more messages
+        if hasattr(self, 'dispatcher'):
+            self.dispatcher.running = False
+        
+        # Close and cancel stream operations
+        try:
+            if hasattr(self, 'requests_stream'):
+                self.requests_stream.close()
+        except Exception as e:
+            print(f"Error closing request stream: {e}")
+            
+        try:
+            if hasattr(self, 'stream_msg_resp'):
+                self.stream_msg_resp.cancel()
+        except Exception as e:
+            print(f"Error cancelling stream: {e}")
 
     def MasterArbitrationUpdate(self, dry_run=False, **kwargs):
         request = p4runtime_pb2.StreamMessageRequest()

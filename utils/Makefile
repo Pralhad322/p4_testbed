@@ -33,7 +33,7 @@ endif
 all: run
 
 run: build
-	sudo PATH=$(PATH) ${P4_EXTRA_SUDO_OPTS} python3 $(RUN_SCRIPT) -t $(TOPO) $(run_args)
+	sudo PATH=$(PATH) PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python ${P4_EXTRA_SUDO_OPTS} python3 $(RUN_SCRIPT) -t $(TOPO) $(run_args)
 
 stop:
 	sudo PATH=$(PATH) `which mn` -c

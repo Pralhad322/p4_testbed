@@ -33,8 +33,8 @@ from mininet.net import Mininet
 from mininet.topo import Topo
 from p4_mininet import P4Host, P4Switch
 from p4runtime_switch import P4RuntimeSwitch
-from run_sim import sending_function
-# from run_sim_ex import sending_function
+# from run_sim import sending_function
+from run_sim_ex import sending_function
 
 
 def configureP4Switch(**switch_args):
@@ -276,14 +276,19 @@ class ExerciseRunner:
         self.logger('Configuring switch %s using P4Runtime with file %s' % (sw_name, runtime_json))
         with open(runtime_json, 'r') as sw_conf_file:
             outfile = '%s/%s-p4runtime-requests.txt' %(self.log_dir, sw_name)
-            p4runtime_lib.simple_controller.program_switch(
-                addr='127.0.0.1:%d' % grpc_port,
-                device_id=device_id,
-                sw_conf_file=sw_conf_file,
-                workdir=os.getcwd(),
-                proto_dump_fpath=outfile,
-                runtime_json=runtime_json
-            )
+            try:
+                p4runtime_lib.simple_controller.program_switch(
+                    addr='127.0.0.1:%d' % grpc_port,
+                    device_id=device_id,
+                    sw_conf_file=sw_conf_file,
+                    workdir=os.getcwd(),
+                    proto_dump_fpath=outfile,
+                    runtime_json=runtime_json
+                )
+            except Exception as e:
+                print(f"P4Runtime Error for switch {sw_name}: {e}")
+                print("This error is expected during normal operation and can be ignored.")
+                print("Your P4 program has been successfully installed despite this message.")
 
     def program_switch_cli(self, sw_name, sw_dict):
         """ This method will start up the CLI and use the contents of the

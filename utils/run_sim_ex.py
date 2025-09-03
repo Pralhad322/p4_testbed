@@ -14,9 +14,9 @@ def sending_function(self):
 
     # Define server-client pairs and parameters
     flows = [
-        {'sender': h1, 'receiver': h5, 'duration': 25, 'priority': 8, 'delay': 0},
-        {'sender': h2, 'receiver': h6, 'duration': 20, 'priority': 4, 'delay': 5},
-        {'sender': h3, 'receiver': h7, 'duration': 15, 'priority': 2, 'delay': 5},
+        {'sender': h1, 'receiver': h5, 'duration': 20, 'priority': 8, 'delay': 0},
+        {'sender': h2, 'receiver': h6, 'duration': 15, 'priority': 4, 'delay': 5},
+        {'sender': h3, 'receiver': h7, 'duration': 10, 'priority': 2, 'delay': 5},
         {'sender': h4, 'receiver': h8, 'duration': 5, 'priority': 0, 'delay': 5},
     ]
 
@@ -34,7 +34,7 @@ def sending_function(self):
     for flow in flows:
         receiver = flow['receiver']
         log_path = server_logs[receiver.name]
-        cmd = f'iperf3 -s --json -i 1 > {log_path} &'
+        cmd = f'iperf3 -s --json -i 0.25 > {log_path} &'
         print(f" {receiver.name}: {cmd}")
         receiver.cmd(cmd)
 
