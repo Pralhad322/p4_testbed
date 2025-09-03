@@ -11,6 +11,8 @@ const bit<16> TYPE_IPV4 = 0x800;
 typedef bit<9>  egressSpec_t;
 typedef bit<48> macAddr_t;
 typedef bit<32> ip4Addr_t;
+register<bit<32>>(8) buffer;
+register<bit<32>>(1) packet_counter;
 
 header ethernet_t {
     macAddr_t dstAddr;
@@ -33,40 +35,14 @@ header ipv4_t {
     ip4Addr_t dstAddr;
 }
 
-header tcp_t {
-    bit<16> srcPort;
-    bit<16> dstPort;
-    bit<32> seqNo;
-    bit<32> ackNo;
-    bit<4>  dataOffset;
-    bit<3>  res;
-    bit<3>  ecn;
-    bit<6>  ctrl;
-    bit<16> window;
-    bit<16> checksum;
-    bit<16> urgentPtr;
-}
-
 struct metadata {
+    bit<32> current_queue_bound;
     bit<32> rank;
-    // bit<32> queue_index;
-    // bit<32> tree_node_lower;
-    // bit<32> tree_node_upper;
-    // bit<32> left_child_lower;
-    // bit<32> left_child_upper;
-    // bit<32> right_child_lower;
-    // bit<32> right_child_upper;
-    bit<32> l1_t;
-    bit<32> l2_t;
-    bit<32> l3_t;
-    bit<32> t;
-    bit<32> cm;
 }
 
 struct headers {
     ethernet_t   ethernet;
     ipv4_t       ipv4;
-    tcp_t        tcp;
 }
 
 /*************************************************************************
@@ -92,14 +68,6 @@ parser MyParser(packet_in packet,
 
     state parse_ipv4 {
         packet.extract(hdr.ipv4);
-        transition select(hdr.ipv4.protocol) {
-            0x06: parse_tcp;
-            default: accept;
-        }
-    }
-
-    state parse_tcp {
-        packet.extract(hdr.tcp);
         transition accept;
     }
 }
@@ -107,20 +75,11 @@ parser MyParser(packet_in packet,
 /*************************************************************************
 **************  I N G R E S S   P R O C E S S I N G   *******************
 *************************************************************************/
-
-register<bit<32>>(7) cml_registers; // 7 entries for cml
-register<bit<32>>(7) cmr_registers; // 7 entries for cmr
-
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
-
-    bit<48> in_flow_id = 0;
-    bit<32> in_flow_size = 0;
-
-    action drop() {
-        mark_to_drop(standard_metadata);
-    }
+    
+    register<bit<32>>(8) threshold;
 
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
@@ -129,22 +88,69 @@ control MyIngress(inout headers hdr,
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
-    // beta
-    action congruity_metric(bit<32> left_bound, bit<32> right_bound) {
-        meta.cm = left_bound;
-        // meta.cm = (left_bound >> 1) + (left_bound >> 3) + (right_bound >> 2) + (right_bound >> 3);
-        // meta.cm = (left_bound >> 1) + (left_bound >> 3) + (right_bound >> 2) + (right_bound >> 3);
+    action drop() {
+        mark_to_drop(standard_metadata);
     }
 
-    // alpha
-    action threshold(bit<32> left_bound, bit<32> right_bound) {
-         meta.t = right_bound;
-        // meta.t = (left_bound >> 2) + (left_bound >> 3) + (right_bound >> 1) + (right_bound >> 3);
+    action sort_8() {
+        bit<32> r0; 
+        bit<32> r1; 
+        bit<32> r2; 
+        bit<32> r3;
+        bit<32> r4; 
+        bit<32> r5; 
+        bit<32> r6; 
+        bit<32> r7;
+        bit<32> tmp;
+
+        buffer.read(r0, 0); 
+        buffer.read(r1, 1); 
+        buffer.read(r2, 2); 
+        buffer.read(r3, 3);
+        buffer.read(r4, 4); 
+        buffer.read(r5, 5); 
+        buffer.read(r6, 6); 
+        buffer.read(r7, 7);
+
+        if (r0 > r1) { tmp = r0; r0 = r1; r1 = tmp; }
+        if (r2 > r3) { tmp = r2; r2 = r3; r3 = tmp; }
+        if (r4 > r5) { tmp = r4; r4 = r5; r5 = tmp; }
+        if (r6 > r7) { tmp = r6; r6 = r7; r7 = tmp; }
+        if (r0 > r2) { tmp = r0; r0 = r2; r2 = tmp; }
+        if (r1 > r3) { tmp = r1; r1 = r3; r3 = tmp; }
+        if (r4 > r6) { tmp = r4; r4 = r6; r6 = tmp; }
+        if (r5 > r7) { tmp = r5; r5 = r7; r7 = tmp; }
+        if (r1 > r2) { tmp = r1; r1 = r2; r2 = tmp; }
+        if (r5 > r6) { tmp = r5; r5 = r6; r6 = tmp; }
+        if (r0 > r4) { tmp = r0; r0 = r4; r4 = tmp; }
+        if (r1 > r5) { tmp = r1; r1 = r5; r5 = tmp; }
+        if (r2 > r6) { tmp = r2; r2 = r6; r6 = tmp; }
+        if (r3 > r7) { tmp = r3; r3 = r7; r7 = tmp; }
+        if (r1 > r2) { tmp = r1; r1 = r2; r2 = tmp; }
+        if (r3 > r4) { tmp = r3; r3 = r4; r4 = tmp; }
+        if (r5 > r6) { tmp = r5; r5 = r6; r6 = tmp; }
+        if (r2 > r3) { tmp = r2; r2 = r3; r3 = tmp; }
+        if (r4 > r5) { tmp = r4; r4 = r5; r5 = tmp; }
+        if (r6 > r7) { tmp = r6; r6 = r7; r7 = tmp; }
+        if (r4 > r6) { tmp = r4; r4 = r6; r6 = tmp; }
+        if (r5 > r7) { tmp = r5; r5 = r7; r7 = tmp; }
+        if (r3 > r4) { tmp = r3; r3 = r4; r4 = tmp; }
+
+        buffer.write(0, r0); 
+        buffer.write(1, r1); 
+        buffer.write(2, r2); 
+        buffer.write(3, r3);
+        buffer.write(4, r4); 
+        buffer.write(5, r5); 
+        buffer.write(6, r6); 
+        buffer.write(7, r7);
     }
 
-    action assign_flow_id(bit<48> flow_id, bit<32> flow_size) {
-        in_flow_id = flow_id;
-        in_flow_size = flow_size;  // Store flow size in metadata
+    action clear_top_4() {
+        buffer.write(4, 0xFFFFFFFF);
+        buffer.write(5, 0xFFFFFFFF);
+        buffer.write(6, 0xFFFFFFFF);
+        buffer.write(7, 0xFFFFFFFF);
     }
 
     table ipv4_lpm {
@@ -160,134 +166,82 @@ control MyIngress(inout headers hdr,
         default_action = NoAction();
     }
 
-    table lookup_flow_id {
-        key = {
-            hdr.ipv4.srcAddr: lpm;
-        }
-        actions = {
-            assign_flow_id;
-            NoAction;
-        }
-        size = 1024;
-        default_action = NoAction();
+    action Quantile_calculation() {
+        bit<32> previous_threshold;
+        buffer.read(previous_threshold, 0);
+        threshold.write(0, previous_threshold);
+        buffer.read(previous_threshold, 1);
+        threshold.write(1, previous_threshold);
+        buffer.read(previous_threshold, 2);
+        threshold.write(2, previous_threshold);
+        buffer.read(previous_threshold, 3);
+        threshold.write(3, previous_threshold);
+        buffer.read(previous_threshold, 4);
+        threshold.write(4, previous_threshold);
+        buffer.read(previous_threshold, 5);
+        threshold.write(5, previous_threshold);
+        buffer.read(previous_threshold, 6);
+        threshold.write(6, previous_threshold);
+        buffer.read(previous_threshold, 7);
+        threshold.write(7, previous_threshold);
     }
 
     apply {
-
-        lookup_flow_id.apply();
-        if (hdr.ipv4.isValid()) {
-            // meta.rank = (bit<32>)hdr.ipv4.tos << 4;
-            // log_msg("Rank of the packet is: {}", {meta.rank});
-
-            bit<32> cml_val;
-            bit<32> cmr_val;
-
-            
-
-            if (hdr.tcp.isValid()) {
-                if (in_flow_size > 0) {
-                    if (in_flow_size - (bit<32>)hdr.tcp.seqNo > 0) {
-                        meta.rank = in_flow_size - (bit<32>)hdr.tcp.seqNo;
-                    } else {
-                        meta.rank = 0;
-                    }
-                }else {
-                    meta.rank = 0;
-                }
-            }
-            else {
-                meta.rank = 0;
-            }
-
-            // log_msg("Rank of the packet is: {}", {meta.rank});
-
-            cml_registers.read(cml_val, 0);
-            cmr_registers.read(cmr_val, 0);
-            threshold(cml_val, cmr_val);
-            if (meta.rank > meta.t) {
-                cml_registers.read(cml_val, 2);
-                cmr_registers.read(cmr_val, 2);
-                threshold(cml_val, cmr_val);
-                if (meta.rank > meta.t) {
-                    cml_registers.read(cml_val, 6);
-                    cmr_registers.read(cmr_val, 6);
-                    threshold(cml_val, cmr_val);
-                    if (meta.rank > meta.t) {
-                        cmr_registers.write(6, meta.rank);
-                        standard_metadata.priority = 0;
-                    } else {
-                        cml_registers.write(6, meta.rank);
-                        standard_metadata.priority = 1;
-                    }
-                    cml_registers.read(cml_val, 6);
-                    cmr_registers.read(cmr_val, 6);
-                    congruity_metric(cml_val, cmr_val);
-                    cmr_registers.write(2, meta.cm);
-                } else {
-                    cml_registers.read(cml_val, 5);
-                    cmr_registers.read(cmr_val, 5);
-                    threshold(cml_val, cmr_val);
-                    if (meta.rank > meta.t) {
-                        cmr_registers.write(5, meta.rank);
-                        standard_metadata.priority = 2;
-                    } else {
-                        cml_registers.write(5, meta.rank);
-                        standard_metadata.priority = 3;
-                    }
-                    cml_registers.read(cml_val, 5);
-                    cmr_registers.read(cmr_val, 5);
-                    congruity_metric(cml_val, cmr_val);
-                    cml_registers.write(2, meta.cm);
-                }
-                cml_registers.read(cml_val, 2);
-                cmr_registers.read(cmr_val, 2);
-                congruity_metric(cml_val, cmr_val);
-                cml_registers.write(0, meta.cm);
-            } else {
-                cml_registers.read(cml_val, 1);
-                cmr_registers.read(cmr_val, 1);
-                threshold(cml_val, cmr_val);
-                if (meta.rank > meta.t) {
-                    cml_registers.read(cml_val, 4);
-                    cmr_registers.read(cmr_val, 4);
-                    threshold(cml_val, cmr_val);
-                    if (meta.rank > meta.t) {
-                        cmr_registers.write(4, meta.rank);
-                        standard_metadata.priority = 4;
-                    } else {
-                        cml_registers.write(4, meta.rank);
-                        standard_metadata.priority = 5;
-                    }
-                    cml_registers.read(cml_val, 4);
-                    cmr_registers.read(cmr_val, 4);
-                    congruity_metric(cml_val, cmr_val);
-                    cmr_registers.write(1, meta.cm);
-                } else {
-                    cml_registers.read(cml_val, 3);
-                    cmr_registers.read(cmr_val, 3);
-                    threshold(cml_val, cmr_val);
-                    if (meta.rank > meta.t) {
-                        cmr_registers.write(3, meta.rank);
-                        standard_metadata.priority = 6;
-                    } else {
-                        cml_registers.write(3, meta.rank);
-                        standard_metadata.priority = 7;
-                    }
-                    cml_registers.read(cml_val, 3);
-                    cmr_registers.read(cmr_val, 3);
-                    congruity_metric(cml_val, cmr_val);
-                    cml_registers.write(1, meta.cm);
-                }
-                cml_registers.read(cml_val, 1);
-                cmr_registers.read(cmr_val, 1);
-                congruity_metric(cml_val, cmr_val);
-                cml_registers.write(0, meta.cm);
-            }
-
-            ipv4_lpm.apply();
+        bit<32> count;
+        meta.rank = (bit<32>)hdr.ipv4.tos;
+        packet_counter.read(count, 0);
+        packet_counter.write(0, count + 1);
+        if (count + 1 < 8) {
+            buffer.write(count + 1, meta.rank); 
+        }else{
+            sort_8();
+            Quantile_calculation();
+            clear_top_4();
+            packet_counter.write(0, count - 4);
+            buffer.write(count + 1, meta.rank);  
         }
+
+        threshold.read(meta.current_queue_bound, 0);
+        if((meta.current_queue_bound >= meta.rank)){
+            standard_metadata.priority = (bit<3>)0;
+        }else{
+            threshold.read(meta.current_queue_bound, 1);
+            if((meta.current_queue_bound >= meta.rank)){
+                standard_metadata.priority = (bit<3>)1;
+            }else{
+                threshold.read(meta.current_queue_bound, 2);
+                if((meta.current_queue_bound >= meta.rank)){
+                    standard_metadata.priority = (bit<3>)2;
+                }else{
+                    threshold.read(meta.current_queue_bound, 3);
+                    if((meta.current_queue_bound >= meta.rank)){
+                        standard_metadata.priority = (bit<3>)3;
+                    }else{
+                        threshold.read(meta.current_queue_bound, 4);
+                        if((meta.current_queue_bound >= meta.rank)){
+                            standard_metadata.priority = (bit<3>)4;
+                        }else{
+                            threshold.read(meta.current_queue_bound, 5);
+                            if((meta.current_queue_bound >= meta.rank)){
+                                standard_metadata.priority = (bit<3>)5;
+                            }else{
+                                threshold.read(meta.current_queue_bound, 6);
+                                if((meta.current_queue_bound >= meta.rank)){
+                                    standard_metadata.priority = (bit<3>)6;
+                                }else{
+                                    standard_metadata.priority = (bit<3>)7;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        ipv4_lpm.apply();
     }
 }
+
 
 /*************************************************************************
 ****************  E G R E S S   P R O C E S S I N G   *******************
@@ -335,7 +289,6 @@ control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
         packet.emit(hdr.ipv4);
-        packet.emit(hdr.tcp);
     }
 }
 

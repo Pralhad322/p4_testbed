@@ -147,29 +147,37 @@ def analyze_iperf_logs(log_files, output_image):
 
 
     # --- Plotting ---
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(3.5, 2.5), dpi=300)
 
     flow_labels_plotted = sorted(df['flow'].unique())
     print(f"Plotting data for flows: {flow_labels_plotted}")
 
+    custom_labels = {
+        'h5': 'Flow 1',
+        'h6': 'Flow 2',
+        'h7': 'Flow 3',
+        'h8': 'Flow 4'
+    }
+
     for flow_label in flow_labels_plotted:
         flow_data = df[df['flow'] == flow_label].sort_values('time_rel')
         if not flow_data.empty:
-            # Use step plot for better visualization of throughput over intervals
-            plt.step(flow_data['time_rel'], flow_data['throughput_mbps'], where='post', label=f'Flow {flow_label}')
+            label = custom_labels.get(flow_label, flow_label)
+            plt.step(flow_data['time_rel'], flow_data['throughput_mbps'], where='post', label=label, linewidth=1)
         else:
             print(f"No data points found for flow: {flow_label}")
 
-
-    plt.xlabel("Time (seconds relative to earliest start)")
-    plt.ylabel("Throughput (Mbps)")
-    plt.title("Throughput vs. Time for Each Flow (Server-Side)")
+    plt.xlabel("Time (seconds)", fontsize=9)
+    plt.ylabel("Throughput (Mbps)", fontsize=9)
+    # plt.title("Throughput vs. Time for Each Flow (Server-Side)")
     if len(flow_labels_plotted) > 0:
-        plt.legend(title="Flow", bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.grid(True)
+        plt.legend(title="Flow", fontsize=6, title_fontsize=8, loc='best')
+    plt.xticks(fontsize=8)
+    plt.yticks(fontsize=8)
+    plt.grid(True, linewidth=0.3)
     plt.ylim(bottom=0) # Ensure y-axis starts at 0
-    plt.xlim(left=0, right=25) # Ensure x-axis starts at 0
-    plt.tight_layout(rect=[0, 0, 0.85, 1]) # Adjust layout for legend
+    plt.xlim(left=0, right=23) # Ensure x-axis starts at 0
+    plt.tight_layout() # Adjust layout for legend
     # plt.show()
     # Save the plot using the provided absolute path
     try:
@@ -182,17 +190,17 @@ def analyze_iperf_logs(log_files, output_image):
 def main():
     parser = argparse.ArgumentParser(description='Analyze multiple iperf3 server JSON logs and plot throughput vs. relative time.')
     # Keep output_image argument, but it has a default absolute path
-    parser.add_argument('--output_image', type=str, default='/home/nwlab/p4/throughput_vs_time_combined.png',
+    parser.add_argument('--output_image', type=str, default='/home/palhad/p4/throughput_vs_time_combined.png',
                         help='Path to save the combined output plot image.')
 
     args = parser.parse_args()
 
     # Define the fixed list of log files to analyze
     fixed_log_files = [
-        '/home/nwlab/p4/tutorials/exercises/basic/outputs/h5_server.json',
-        '/home/nwlab/p4/tutorials/exercises/basic/outputs/h6_server.json',
-        '/home/nwlab/p4/tutorials/exercises/basic/outputs/h7_server.json',
-        '/home/nwlab/p4/tutorials/exercises/basic/outputs/h8_server.json'
+        '/home/palhad/p4/tutorials/exercises/basic/outputs/h5_server.json',
+        '/home/palhad/p4/tutorials/exercises/basic/outputs/h6_server.json',
+        '/home/palhad/p4/tutorials/exercises/basic/outputs/h7_server.json',
+        '/home/palhad/p4/tutorials/exercises/basic/outputs/h8_server.json'
     ]
 
     # Check if files exist before passing them
