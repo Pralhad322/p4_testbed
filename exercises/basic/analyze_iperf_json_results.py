@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-def analyze_iperf_logs(log_files, output_image):
+def analyze_iperf_logs(log_files, output_image, output_data=None, no_plot=False):
     """
     Parses multiple iperf3 server JSON logs, calculates relative start/end times,
     and plots throughput vs. relative time for each flow.
@@ -133,6 +133,30 @@ def analyze_iperf_logs(log_files, output_image):
     df = pd.DataFrame(all_data)
     df['flow'] = df['flow'].astype('category')
 
+    # Write processed data to CSV if requested (or by default)
+    if output_data:
+        try:
+            out_dir = os.path.dirname(output_data)
+            if out_dir:
+                os.makedirs(out_dir, exist_ok=True)
+            # Save raw per-interval data sorted by flow and time
+            df.sort_values(['flow', 'time_rel']).to_csv(output_data, index=False)
+            print(f"Wrote processed throughput data to {output_data}")
+            # Also write a compact JSON summary of flow start/end times
+            summary = {}
+            for log_file, info in flow_info.items():
+                label = info.get('label') if info.get('label') else Path(log_file).stem
+                summary[label] = {
+                    'start_rel': info.get('start_rel'),
+                    'end_rel': info.get('end_rel')
+                }
+            summary_path = output_data + '.summary.json'
+            with open(summary_path, 'w') as sf:
+                json.dump(summary, sf, indent=2)
+            print(f"Wrote flow summary to {summary_path}")
+        except Exception as e:
+            print(f"Error writing output data files: {e}")
+
     # --- Print Flow Start/End Times ---
     print("\n--- Flow Start and End Times (Relative to Earliest Start) ---")
     sorted_flows = sorted(flow_info.items(), key=lambda item: item[1].get('start_rel', float('inf')))
@@ -145,6 +169,11 @@ def analyze_iperf_logs(log_files, output_image):
             print(f"Flow ({Path(log_file).name}): Could not determine start/end times.")
     print("------------------------------------------------------------\n")
 
+
+    # If plotting is disabled, skip plotting and return after writing data
+    if no_plot:
+        print("Skipping plotting because --no-plot was specified.")
+        return
 
     # --- Plotting ---
     plt.figure(figsize=(3.5, 2.5), dpi=300)
@@ -176,14 +205,17 @@ def analyze_iperf_logs(log_files, output_image):
     plt.yticks(fontsize=8)
     plt.grid(True, linewidth=0.3)
     plt.ylim(bottom=0) # Ensure y-axis starts at 0
-    plt.xlim(left=0, right=23) # Ensure x-axis starts at 0
+    plt.xlim(left=0, right=25) # Ensure x-axis starts at 0
     plt.tight_layout() # Adjust layout for legend
     # plt.show()
     # Save the plot using the provided absolute path
     try:
         # plt.show()  # Show the plot interactively
-        plt.savefig(output_image)
-        print(f"Plot saved to {output_image}")
+        if output_image:
+            plt.savefig(output_image)
+            print(f"Plot saved to {output_image}")
+        else:
+            print("No output_image specified; skipping saving plot.")
     except Exception as e:
         print(f"Error saving plot: {e}")
 
@@ -192,6 +224,10 @@ def main():
     # Keep output_image argument, but it has a default absolute path
     parser.add_argument('--output_image', type=str, default='/home/palhad/p4/throughput_vs_time_combined.png',
                         help='Path to save the combined output plot image.')
+    parser.add_argument('--output_data', type=str, default='/home/palhad/p4/throughput_data.csv',
+                        help='Path to save CSV of processed throughput data (time_rel, throughput_mbps, flow).')
+    parser.add_argument('--no-plot', action='store_true', default=False,
+                        help='If set, skip plotting and only write the processed data to CSV/JSON summary.')
 
     args = parser.parse_args()
 
@@ -216,7 +252,7 @@ def main():
         print("Error: None of the expected log files were found. Exiting.")
         return
 
-    analyze_iperf_logs(existing_log_files, args.output_image)
+    analyze_iperf_logs(existing_log_files, args.output_image, output_data=args.output_data, no_plot=args.no_plot)
 
 if __name__ == "__main__":
     main()
